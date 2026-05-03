@@ -1,17 +1,10 @@
 # gpudiff
 
-**Differential cubin tester for GPU compilers.**
+Differential cubin tester for GPU compilers.
 
 Take two compilers and a corpus. Compile each input through both. Byte-diff
 the outputs. Get a per-kernel verdict (`BYTE_MATCH` / `MAJOR_DIFF` /
-`OURS_FAILED`) plus opcode-histogram deltas. Wire into CI.
-
-There's no public tool that does this for GPU compilers. NVIDIA's
-`cuobjdump` and `nvdisasm` give you per-binary output but no diff harness;
-fuzzers like csmith find bugs but don't track corpus regressions.
-`CuAssembler` does cubin parsing but isn't a comparator. `gpudiff` is what
-you actually need to gate "did my optimizer regression-break a kernel
-that was BYTE_MATCH yesterday?"
+`OURS_FAILED`) plus opcode-histogram deltas.
 
 ## Install
 
@@ -30,8 +23,6 @@ dependencies beyond the Python 3.10+ standard library:
 python gpudiff.py --help
 ```
 
-A PyPI release will land once the API stabilizes (target: 0.2.0).
-
 ## Quick start
 
 ```bash
@@ -43,20 +34,28 @@ gpudiff \
     --junit     report.xml
 ```
 
-Both compilers are specified as **shell command templates** with two
+Both compilers are specified as shell command templates with two
 placeholders: `{in}` for the input source file, `{out}` for the output
 binary. `gpudiff` invokes both, expects exit-0 plus an `{out}` file, and
 classifies each kernel.
 
-No Python API coupling. If your compiler is Python-only, wrap it in a
-CLI shim.
+If your compiler is Python-only, wrap it in a CLI shim — there's no
+Python API coupling.
+
+## Verdict definitions
+
+- `BYTE_MATCH` — cubin bytes are identical
+- `MAJOR_DIFF` — cubins differ; opcode histogram delta in report
+- `OURS_FAILED` — candidate compiler errored or produced no output
+- `REF_FAILED` — reference compiler errored (rare; usually a bad input)
+- `BOTH_FAILED` — both errored (input is malformed for both)
 
 ## Use cases
 
 ### CI gate
 
-Drop into GitHub Actions / GitLab CI. JUnit output integrates with the
-PR view; non-zero exit blocks merge if anything regressed.
+JUnit output integrates with GitHub Actions / GitLab CI / Jenkins. Non-zero
+exit blocks merge if a kernel regressed.
 
 ```yaml
 # .github/workflows/gpudiff.yml
@@ -92,26 +91,17 @@ git bisect run gpudiff \
 Bisect terminates on the first commit where the kernel stops being
 `BYTE_MATCH`.
 
-### Research / paper-track
+### Time-series tracking
 
-Run periodically, dump JSON, build a time-series of `BYTE_MATCH%`. The
-JSON output includes per-kernel cubin SHA, instruction counts, opcode
+Run periodically, dump JSON, build a record of `BYTE_MATCH%` over time.
+The JSON output includes per-kernel cubin SHA, instruction counts, opcode
 histogram deltas, and per-compile elapsed time.
 
-### Differential bug-finding
+### Differential testing
 
 Feed a fuzzer's output corpus through `gpudiff` to surface miscompiles:
-when both compilers exit-0 but produce byte-different output, that's
-either an under-specified ISA point or a real bug in one. Cross-reference
-hardware execution to determine which.
-
-## Verdict definitions
-
-- `BYTE_MATCH` — cubin bytes are identical
-- `MAJOR_DIFF` — cubins differ; opcode histogram delta in report
-- `OURS_FAILED` — candidate compiler errored or produced no output
-- `REF_FAILED` — reference compiler errored (rare; usually a bad input)
-- `BOTH_FAILED` — both errored (input is malformed for both)
+when both compilers exit-0 but produce byte-different output, hardware
+execution determines which is correct.
 
 ## Output formats
 
@@ -119,7 +109,7 @@ hardware execution to determine which.
 |------|--------|-----|
 | `--output report.md` | Markdown | Human reading; PR comment bodies |
 | `--json report.json` | JSON | Programmatic consumption; baseline tracking |
-| `--junit report.xml` | JUnit XML | CI integration (GitHub Actions, GitLab, Jenkins) |
+| `--junit report.xml` | JUnit XML | CI integration |
 
 If `--output` is omitted, markdown goes to stdout.
 
@@ -135,25 +125,18 @@ If `--output` is omitted, markdown goes to stdout.
 ## Disassembler
 
 By default, `gpudiff` invokes `nvdisasm -c {in}` to produce SASS for the
-opcode histogram. Override with `--disasm 'mydisasm --opt {in}'` if you
-have a different tool. `--no-disasm` skips the histogram entirely (~30%
-faster; verdict is then byte-diff only).
+opcode histogram. Override with `--disasm 'mydisasm --opt {in}'` for a
+different tool. `--no-disasm` skips the histogram entirely (~30% faster;
+verdict is then byte-diff only).
 
 ## Limitations
 
-- **Single-architecture per run.** If your build emits multiple SM
-  targets, run `gpudiff` once per target.
-- **No cross-cubin link diffs.** Each input is compared independently.
-- **No semantic / runtime diff.** Two byte-different cubins may produce
+- Single-architecture per run. If your build emits multiple SM targets,
+  run `gpudiff` once per target.
+- No cross-cubin link diffs. Each input is compared independently.
+- No semantic / runtime diff. Two byte-different cubins may produce
   identical output on real hardware. `gpudiff` is byte-comparison only;
   use a separate runtime test for semantic equivalence.
-
-## Development
-
-The full session that motivated this tool — 37 phases of openptxas vs
-ptxas differential testing on the Forge corpus — is documented in the
-companion repo. `gpudiff`'s comparator core is the extracted, generalized
-form of `forge_kernel_compare.py`.
 
 ## License
 
