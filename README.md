@@ -15,19 +15,22 @@ that was BYTE_MATCH yesterday?"
 
 ## Install
 
-```bash
-pip install gpudiff
-```
-
-Or directly from source:
+From source:
 
 ```bash
-git clone https://github.com/<user>/gpudiff
+git clone https://github.com/garrick99/gpudiff
 cd gpudiff
 pip install -e .
 ```
 
-Requires Python 3.10+. No dependencies beyond the standard library.
+Or run directly without install — `gpudiff.py` is a single file with no
+dependencies beyond the Python 3.10+ standard library:
+
+```bash
+python gpudiff.py --help
+```
+
+A PyPI release will land once the API stabilizes (target: 0.2.0).
 
 ## Quick start
 
